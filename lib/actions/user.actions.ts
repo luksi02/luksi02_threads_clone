@@ -4,6 +4,7 @@ import {connectToDB} from "@/lib/mongoose";
 import User from "@/lib/models/user.model";
 import {revalidatePath} from "next/cache";
 import Thread from "@/lib/models/thread.model";
+import {FilterQuery, SortOrder} from "mongoose";
 
 interface Params {
     userId: string,
@@ -59,7 +60,7 @@ export async function fetchUser(userId: string) {
             //     path: 'communities',
             //     model: Community
             // })
-    } catch (error) {
+    } catch (error : any) {
 
         throw new Error(`Failed to fetch user: ${error.message}`)
 
@@ -119,7 +120,7 @@ export async function fetchUsers({
 
         // Create an initial query object to filter users.
         const query: FilterQuery<typeof User> = {
-            id: { $ne: userId }, // Exclude the current user from the results.
+            // id: { $ne: userId }, // Exclude the current user from the results - not used this time - because there is only one!
         };
 
         // If the search string is not empty, add the $or operator to match either username or name fields.
@@ -150,5 +151,35 @@ export async function fetchUsers({
     } catch (error) {
         console.error("Error fetching users:", error);
         throw error;
+    }
+}
+
+export async function getActivity(userId: string) {
+    try {
+        connectToDB();
+
+    //     find all threads created by the user
+        const userThreads = await Thread.find({ author: userId });
+
+    //     Collect all the child thread ids (replies) from the 'children' field
+
+        const childThreadsIds = userThreads.reduce((acc, userThread) => {
+            return acc.concat(userThread.children)
+        }, [])
+
+        const replies = await Thread.find({
+            _id: { $in: childThreadsIds },
+            // author: { $ne: userId } // this magic trick would exclude current user, but for now we dont do that just yet
+        }).populate({
+            path: 'author',
+            model: User,
+            select: 'name image _id'
+        })
+
+        return replies;
+
+
+    } catch (error: any) {
+        throw new Error(`Failed to fetch activity: ${error.message}`)
     }
 }
